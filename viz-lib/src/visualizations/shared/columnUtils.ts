@@ -89,9 +89,10 @@ export function getDefaultFormatOptions(column: any) {
 
 export function getColumnsOptions(columns: any, visualizationColumns: any, extraFields = {}) {
   const options = getDefaultColumnsOptions(columns, extraFields);
+  visualizationColumns ??= [];
 
   const orderedNames = computeSmartColumnOrder(columns, visualizationColumns);
-  const nameToOrder = _.fromPairs(_.map(orderedNames, (name, index) => [name, { order: index + 1 }]));
+  const nameToOrder = _.fromPairs(_.map(orderedNames, (name, order) => [name, { order }]));
 
   _.each(options, (col) => _.extend(col, visualizationColumns[col.name], nameToOrder[col.name]));
 
@@ -100,7 +101,7 @@ export function getColumnsOptions(columns: any, visualizationColumns: any, extra
 
 // Merge saved visualization order with live query order, preserving user
 // constraints while keeping untouched columns in their natural data sequence.
-function computeSmartColumnOrder(queryColumns: any, visualizationColumns: any) {
+function computeSmartColumnOrder(queryColumns: any, visualizationColumns: any): string[] {
   const columnNames = _.map(queryColumns, "name");
 
   if (columnNames.length <= 1) {
