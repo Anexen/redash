@@ -44,12 +44,13 @@ export function getDefaultColumnsOptions(columns: any, extraFields = {}) {
     highlightLinks: false,
   };
 
-  return _.map(columns, (col) => ({
+  return _.map(columns, (col, index) => ({
     name: col.name,
     type: col.type,
     // @ts-expect-error ts-migrate(7053) FIXME: Element implicitly has an 'any' type because expre... Remove this comment to see the full error message
     displayAs: displayAs[col.type] || "string",
     visible: true,
+    order: 100000 + index,
     title: getColumnNameWithoutType(col.name),
     alignContent: getColumnContentAlignment(col.type),
     description: "",
@@ -87,14 +88,48 @@ export function getDefaultFormatOptions(column: any) {
   };
 }
 
+export function wereColumnsReordered(queryColumns: any, visualizationColumns: any) {
+  queryColumns = _.map(queryColumns, (col) => col.name);
+  visualizationColumns = _.map(visualizationColumns, (col) => col.name);
+
+  // Some columns may be removed - so skip them (but keep original order)
+  visualizationColumns = _.filter(visualizationColumns, (col) => _.includes(queryColumns, col));
+  // Pick query columns that were previously saved with viz (but keep order too)
+  queryColumns = _.filter(queryColumns, (col) => _.includes(visualizationColumns, col));
+
+  // Both array now have the same size as they both contains only common columns
+  // (in fact, it was an intersection, that kept order of items on both arrays).
+  // Now check for equality item-by-item; if common columns are in the same order -
+  // they were not reordered in editor
+  for (let i = 0; i < queryColumns.length; i += 1) {
+    if (visualizationColumns[i] !== queryColumns[i]) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function getColumnsOptions(columns: any, visualizationColumns: any, extraFields = {}) {
   const options = getDefaultColumnsOptions(columns, extraFields);
   visualizationColumns ??= [];
 
-  const orderedNames = computeSmartColumnOrder(columns, visualizationColumns);
-  const nameToOrder = _.fromPairs(_.map(orderedNames, (name, order) => [name, { order }]));
+  if (wereColumnsReordered(columns, visualizationColumns)) {
+    if (columns.length === visualizationColumns.length) {
+      visualizationColumns = _.fromPairs(
+        _.map(visualizationColumns, (col, index) => [col.name, _.extend({}, col, { order: index })])
+      );
+    } else {
+      const orderedNames = computeSmartColumnOrder(columns, visualizationColumns);
+      const nameToOrder = _.fromPairs(_.map(orderedNames, (name, index) => [name, { order: index }]));
 
-  _.each(options, (col) => _.extend(col, visualizationColumns[col.name], nameToOrder[col.name]));
+      _.each(options, (col) => _.extend(col, nameToOrder[col.name]));
+      visualizationColumns = _.fromPairs(_.map(visualizationColumns, (col) => [col.name, _.omit(col, "order")]));
+    }
+  } else {
+    visualizationColumns = _.fromPairs(_.map(visualizationColumns, (col) => [col.name, _.omit(col, "order")]));
+  }
+
+  _.each(options, (col) => _.extend(col, visualizationColumns[col.name]));
 
   return _.sortBy(options, "order");
 }
